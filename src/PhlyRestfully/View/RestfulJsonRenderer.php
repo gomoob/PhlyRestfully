@@ -25,6 +25,12 @@ use Zend\View\Renderer\JsonRenderer;
  * - API-Problem
  * - HAL collections
  * - HAL resources
+ *
+ * <p>Please note that this JSON Renderer is not the same as the Phly/PlyRestfully one and adds the following
+ *    functionnalities : </p>
+ * <ul>
+ *    <li>Replace escaped slashes '\/' by normal slashes '/'. </li>
+ * </ul>
  */
 class RestfulJsonRenderer extends JsonRenderer
 {
@@ -143,7 +149,15 @@ class RestfulJsonRenderer extends JsonRenderer
             return parent::render($payload);
         }
 
-        return parent::render($nameOrModel, $values);
+        // Render a JSON string using the Zend Framework 2 JSON Renderer
+        $json = parent::render($nameOrModel, $values);
+
+        // Replace the escaped slashes (please note that this is only necessary with PHP 5.3 because PHP 5.4 has a
+        // JSON_UNESCAPED_SLASHES option)
+        $formattedJson = str_replace('\\/', '/', $json);
+
+        return $formattedJson;
+
     }
 
     /**
