@@ -35,6 +35,38 @@ use Zend\View\Renderer\JsonRenderer;
 class RestfulJsonRenderer extends JsonRenderer
 {
     /**
+     * A reference to a custom GoMoob <tt>HalLinks</tt> Plugin which extends the <tt>PhlyRestfully</tt> Plugin. This
+     * GoMoob <tt>HalLinks</tt> Plugin allow to generate more HAL properties than the <tt>PhlyRestfully</tt> Plugin,
+     * like the <tt>title</tt> of the link and a <tt>templated</tt> parameter.
+     *
+     *  <p>A <tt>HalLinks</tt> Plugin is simply a Zend View Helper.</p>
+     *
+     *  <p>If this attribute is <code>null</code> then the default <tt>PhlyRestfully</tt> <tt>HalLink</tt> Plugin is used.</p>
+     *
+     * @var \Gomoob\PhlyRestfully\Plugin\HalLinks
+     */
+    private $halLinks = null;
+
+    /**
+     * Sets a reference to a custom GoMoob <tt>HalLinks</tt> Plugin which extends the <tt>PhlyRestfully</tt> Plugin. This
+     * GoMoob <tt>HalLinks</tt> Plugin allow to generate more HAL properties than the <tt>PhlyRestfully</tt> Plugin,
+     * like the <tt>title</tt> of the link and a <tt>templated</tt> parameter.
+     *
+     * <p>A <tt>HalLinks</tt> Plugin is simply a Zend View Helper.</p>
+     *
+     * <p>If no custom <tt>HalLinks</tt> Plugin is provided then the default <tt>PhlyRestfully</tt> <tt>HalLink</tt>
+     * Plugin is used.</p>
+     *
+     *
+     * @param \Gomoob\PhlyRestfully\Plugin\HalLinks $halLinks The custom <tt>HalLinks</tt> Plugin to use.
+     */
+    public function setHalLink(HalLinks $halLinks) {
+
+        $this -> halLinks = $halLinks;
+
+    }
+
+    /**
      * @var ApiProblem
      */
     protected $apiProblem;
@@ -178,16 +210,44 @@ class RestfulJsonRenderer extends JsonRenderer
     }
 
     /**
-     * Inject the helper manager with the HalLinks helper
-     *
-     * @param  HelperPluginManager $helpers
-     */
-    protected function injectHalLinksHelper(HelperPluginManager $helpers)
-    {
-        $helper = new HalLinks();
-        $helper->setView($this);
-        $helper->setServerUrlHelper($helpers->get('ServerUrl'));
-        $helper->setUrlHelper($helpers->get('Url'));
-        $helpers->setService('HalLinks', $helper);
-    }
+	 * Initialize a <tt>HalLinks</tt> View Helper and injects the instance inside the Zend <tt>HelperPluginManager</tt>.
+	 *
+	 * @param  HelperPluginManager $helperPluginManager The Zend Helper Plugin Manager which stores references to Zend
+	 *                                                  View Helpers.
+	 */
+	protected function injectHalLinksHelper(HelperPluginManager $helperPluginManager) {
+
+	    // -- Gets the URL View Helper (used to generate links from route name and arguments) and the Serveur URL View
+	    // -- Helper (used to gets the current host's URL like http://site.com)
+	    $urlViewHelper = $helperPluginManager -> get('Url');
+	    $serverUrlViewHelper = $helperPluginManager -> get('ServerUrl');
+
+		$helper = null;
+
+		// -- If a custom HalLinks Plugin / View Helper is set in the RESTFUL JSON Renderer we define it as the
+		// -- HalLinks View Helper to register inside the Zend Framework 2 HelperPluginManager.
+		if ($this -> halLinks !== null) {
+
+			$helper = $this -> halLinks;
+
+		}
+
+		// -- Otherwise the default PhlyRestfully HalLinks / View Helper is registered in the HelperPluginManager.
+		else {
+
+			$helper = new \PhlyRestfully\Plugin\HalLinks();
+
+		}
+
+		// -- The Renderer / Zend View (in Zend Renderers and views are the same) to generate HAL Links to
+		$helper -> setView($this);
+
+		// -- Sets the Zend View Helpers which are used by the HalLinks View Helper
+		$helper -> setServerUrlHelper($serverUrlViewHelper);
+		$helper -> setUrlHelper($urlViewHelper);
+
+		// -- Registers the HalLinks View Helper inside the Helper Plugin Manager
+		$helperPluginManager -> setService('HalLinks', $helper);
+
+	}
 }
