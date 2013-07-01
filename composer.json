@@ -1,5 +1,5 @@
 {
-    "name": "phly/phly-restfully",
+    "name": "gomoob/phly-restfully",
     "description": "ZF2 Module providing structure for RESTful resources",
     "type": "library",
     "license": "BSD-2-Clause",
@@ -9,7 +9,7 @@
         "module",
         "rest"
     ],
-    "homepage": "https://github.com/weierophinney/PhlyRestfully",
+    "homepage": "https://github.com/gomoob/PhlyRestfully",
     "authors": [
         {
             "name": "Matthew Weier O'Phinney",
