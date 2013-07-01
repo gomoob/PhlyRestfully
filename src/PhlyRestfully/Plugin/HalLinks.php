@@ -33,11 +33,89 @@ use Zend\View\Helper\Url;
 
 /**
  * Generate links for use with HAL payloads
+ *
+ * <p>Please not that this HalLinks implementation is not the same as the Phly/PhlyRestfully one and adds the following
+ *    functionnalities:</p>
+ * <ul>
+ *     <li>Decodes the Link URLs to note have %XX codes in the URL.</li>
+ * </ul>
  */
 class HalLinks extends AbstractHelper implements
     ControllerPluginInterface,
     EventManagerAwareInterface
 {
+    /**
+     * The name of the URL parameter used to specify the number of the page to retrieve using pagination with Collection
+     * REST Resources.
+     *
+     * @var string
+     */
+    // TODO: Ceci serait mieux dans la classe HalCollection
+    private $pageNumberUrlParameterName = 'page';
+
+    /**
+     * The name of the URL parameter used to specify the page size of the page to retrieve using pagination with
+     * Collection REST Resources.
+     *
+     * @var string
+     */
+    // TODO: Ceci serait mieux dans la classe HalCollection
+    private $pageSizeUrlParameterName = 'page_size';
+
+
+
+    /**
+     * Gets the name of the URL parameter used to specify the number of the page to retrieve using pagination with
+     * Collection REST Resources.
+     *
+     * @return string the name of the URL parameter used to specify the number of the page to retrieve using pagination
+     *                with Collection REST Resources.
+     */
+    public function getPageNumberUrlParameterName() {
+
+        return $this -> pageNumberUrlParameterName;
+
+    }
+
+    /**
+     * Gets the name of the URL parameter used to specify the page size of the page to retrieve using pagination with
+     * Collection REST Resources.
+     *
+     * @return string the name of the URL parameter used to specify the page size of the page to retrieve using
+     *                pagination with Collection REST Resources.
+     */
+    public function getPageSizeUrlParameterName() {
+
+        return $this -> pageSizeUrlParameterName;
+
+    }
+
+    /**
+     * Sets the name of the URL parameter used to specify the number of the page to retrieve using pagination with
+     * Collection REST Resources.
+     *
+     * @param string $pageNumberUrlParameterName the name of the URL parameter used to specify the number of the page to
+     *                                           retrieve using pagination with Collection REST Resources.
+     */
+    public function setPageNumberUrlParameterName($pageNumberUrlParameterName) {
+
+        $this -> pageNumberUrlParameterName = $pageNumberUrlParameterName;
+
+    }
+
+    /**
+     * Sets the name of the URL parameter used to specify the page size of the page to retrieve using pagination with
+     * Collection REST Resources.
+     *
+     * @param string $pageSizeUrlParameterName the name of the URL parameter used to specify the page size of the page
+     *                                         to retrieve using pagination with Collection REST Resources.
+     */
+    public function setPageSizeUrlParameterName($pageSizeUrlParameterName) {
+
+        $this -> pageSizeUrlParameterName = $pageSizeUrlParameterName;
+
+    }
+
     /**
      * @var DispatchableInterface
      */
@@ -330,8 +408,77 @@ class HalLinks extends AbstractHelper implements
         $payload = $halCollection->attributes;
         $payload['_links']    = $this->fromResource($halCollection);
         $payload['_embedded'] = array(
-            $collectionName => $this->extractCollection($halCollection),
+                $collectionName => array(),
         );
+
+        $events               = $this->getEventManager();
+        $resourceRoute        = $halCollection->resourceRoute;
+        $resourceRouteParams  = $halCollection->resourceRouteParams;
+        $resourceRouteOptions = $halCollection->resourceRouteOptions;
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // RENDER EACH RESOURCE OF THE COLLECTION
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        foreach ($collection as $resource) {
+            $eventParams = new ArrayObject(array(
+                    'collection'   => $halCollection,
+                    'resource'     => $resource,
+                    'route'        => $resourceRoute,
+                    'routeParams'  => $resourceRouteParams,
+                    'routeOptions' => $resourceRouteOptions,
+            ));
+            $events->trigger('renderCollection.resource', $this, $eventParams);
+
+            $resource = $eventParams['resource'];
+
+            if (!is_array($resource)) {
+                $resource = $this->convertResourceToArray($resource);
+            }
+
+            foreach ($resource as $key => $value) {
+                if (!$value instanceof HalResource) {
+                    continue;
+                }
+                $this->extractEmbeddedHalResource($resource, $key, $value);
+            }
+
+            $id = $this->getIdFromResource($resource);
+            if (!$id) {
+                // Cannot handle resources without an identifier
+                // Return as-is
+                $payload['_embedded'][$collectionName][] = $resource;
+                continue;
+            }
+
+            if ($eventParams['resource'] instanceof LinkCollectionAwareInterface) {
+                $links = $eventParams['resource']->getLinks();
+            }
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // C'EST TRES SAL MAIS C'EST LA SEULE SOLUTION TROUVEE POUR PERMETTRE FACILEMENT LA GENERATION DE LIENS
+            // CUSTOM
+            // TODO: VOIR CECI : https://github.com/weierophinney/PhlyRestfully/issues/79
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            else if(array_key_exists('_links', $resource)) {
+                $links = $resource['_links'];
+            }
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            else {
+                $links = new LinkCollection();
+            }
+
+            $selfLink = new Link('self');
+            $selfLink -> setRoute(
+                    $eventParams['route'],
+                    array_merge($eventParams['routeParams'], array('id' => $id)),
+                    $eventParams['routeOptions']
+            );
+            $links->add($selfLink);
+
+            $resource['_links'] = $this->fromLinkCollection($links);
+            $payload['_embedded'][$collectionName][] = $resource;
+        }
 
         return $payload;
     }
@@ -370,6 +517,18 @@ class HalLinks extends AbstractHelper implements
                 $this->extractEmbeddedHalCollection($resource, $key, $value);
             }
         }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // C'EST TRES SAL MAIS C'EST LA SEULE SOLUTION TROUVEE POUR PERMETTRE FACILEMENT LA GENERATION DE LIENS
+        // CUSTOM
+        // TODO: VOIR CECI : https://github.com/weierophinney/PhlyRestfully/issues/79
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        if(array_key_exists('_links', $resource)) {
+
+            $links = array_merge($links, $this -> fromLinkCollection($resource['_links']));
+
+        }
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         $resource['_links'] = $links;
 
@@ -438,6 +597,23 @@ class HalLinks extends AbstractHelper implements
             return array(
                 'href' => $linkDefinition->getUrl(),
             );
+        }
+
+        // -- Decode %XX URL codes
+        $linkArray['href'] = urldecode($linkArray['href']);
+
+        // -- If a 'title' attribute is provided we set it
+        if ($linkDefinition -> getTitle() !== null) {
+
+            $linkArray['title'] = $linkDefinition -> getTitle();
+
+        }
+
+        // -- If a 'templated' attribute is provided we set it
+        if ($linkDefinition->isTemplated() !== null) {
+
+            $linkArray['templated'] = $linkDefinition -> isTemplated();
+
         }
 
         $path = call_user_func(
@@ -650,80 +826,94 @@ class HalLinks extends AbstractHelper implements
      * @param  HalCollection $halCollection
      * @return array
      */
-    protected function injectPaginationLinks(HalCollection $halCollection)
-    {
-        $collection = $halCollection->collection;
-        $page       = $halCollection->page;
-        $pageSize   = $halCollection->pageSize;
-        $route      = $halCollection->collectionRoute;
-        $params     = $halCollection->collectionRouteParams;
-        $options    = $halCollection->collectionRouteOptions;
+    // TODO: Surcharge pour corriger un bug de PhlyRestfully sur la pagination. Le bug intervient quand la collection
+	// TODO: attachée à la HAL Collection ($halCollection -> collection) est un 'Paginator' Zend. Si le paginateur Zend
+	// TODO: défini un nombre de page X le bug fait que X devient égal à 1 alors qu'il ne devrait pas. Le problème est
+	// TODO: que le count est réalisé après les deux appels à 'setItemCountPerPage' et 'setCurrentPageNumber'.
+	// TODO: En fait je ne comprends pas pourquoi la collection n'utilise pas les paramètres du paginateur, aussi
+	// TODO: après l'appel de cette méthode dans ResourceController à la ligne 455 il y a encore des appels qui risquent
+	// TODO: de surcharger...
+	protected function injectPaginationLinks(\PhlyRestfully\HalCollection $halCollection)
+	{
+	    $collection = $halCollection->collection;
 
-        $collection->setItemCountPerPage($pageSize);
-        $collection->setCurrentPageNumber($page);
+	    // TODO: Incompréhensible, quand cette fonction est appelée on utilise forcément un paginateur, je ne vois pas
+	    // TODO: pourquoi PhluRestfully ne réutilise pas les paramètres du paginateur donc...
+	    $page = $collection -> getCurrentPageNumber();
+	    $pageSize = $collection -> getItemCountPerPage();
+	    //$page       = $halCollection->page;
+	    //$pageSize   = $halCollection->pageSize;
 
-        $count = count($collection);
-        if (!$count) {
-            return true;
-        }
+	    $route      = $halCollection -> collectionRoute;
+	    $params     = $halCollection -> collectionRouteParams;
+	    $options    = $halCollection -> collectionRouteOptions;
 
-        if ($page < 1 || $page > $count) {
-            return new ApiProblem(409, 'Invalid page provided');
-        }
+	    // TODO: Ici on a placé le count et le if suivant avant les deux appels d'après pour corriger un bug.
+	    $count = count($collection);
 
-        $links = $halCollection->getLinks();
-        $next  = ($page < $count) ? $page + 1 : false;
-        $prev  = ($page > 1)      ? $page - 1 : false;
+	    if (!$count) {
 
-        // self link
-        $link = new Link('self');
-        $link->setRoute($route);
-        $link->setRouteParams($params);
-        $link->setRouteOptions(ArrayUtils::merge($options, array(
-            'query' => array('page' => $page))
-        ));
-        $links->add($link, true);
+	        return true;
 
-        // first link
-        $link = new Link('first');
-        $link->setRoute($route);
-        $link->setRouteParams($params);
-        $link->setRouteOptions($options);
-        $links->add($link);
+	    }
 
-        // last link
-        $link = new Link('last');
-        $link->setRoute($route);
-        $link->setRouteParams($params);
-        $link->setRouteOptions(ArrayUtils::merge($options, array(
-            'query' => array('page' => $count))
-        ));
-        $links->add($link);
+	    if ($page < 1 || $page > $count) {
 
-        // prev link
-        if ($prev) {
-            $link = new Link('prev');
-            $link->setRoute($route);
-            $link->setRouteParams($params);
-            $link->setRouteOptions(ArrayUtils::merge($options, array(
-                'query' => array('page' => $prev))
-            ));
-            $links->add($link);
-        }
+	        return new ApiProblem(409, 'Invalid page provided');
 
-        // next link
-        if ($next) {
-            $link = new Link('next');
-            $link->setRoute($route);
-            $link->setRouteParams($params);
-            $link->setRouteOptions(ArrayUtils::merge($options, array(
-                'query' => array('page' => $next))
-            ));
-            $links->add($link);
-        }
+	    }
 
-        return true;
-    }
+	    // TODO: Idem, aucun intérêt, pourquoi modifier le paginateur alors qu'il est fourni !
+	    // $collection->setItemCountPerPage($pageSize);
+	    // $collection->setCurrentPageNumber($page);
+
+        $links = $halCollection -> getLinks();
+	    $next  = ($page < $count) ? $page + 1 : false;
+	    $prev  = ($page > 1)      ? $page - 1 : false;
+
+	    // self link
+	    $link = new \PhlyRestfully\Link('self');
+	    $link -> setRoute($route);
+	    $link -> setRouteParams($params);
+	    // TODO: Ici on ne fait pas le merge PhlyRestfully car il impose un paramètre 'page' ce qui n'est pas très
+	    // TODO: flexible, cette remarque est valable pour tous les autres liens générés.
+	    $link -> setRouteOptions($options);
+	    $links -> add($link, true);
+
+	    // first link
+	    $link = new \PhlyRestfully\Link('first');
+	    $link -> setRoute($route);
+	    $link -> setRouteParams($params);
+	    $link -> setRouteOptions($this -> getLinkMergedOptions($options, 1, $pageSize));
+	    $links -> add($link);
+
+	    // last link
+	    $link = new \PhlyRestfully\Link('last');
+	    $link -> setRoute($route);
+	    $link -> setRouteParams($params);
+	    $link -> setRouteOptions($this -> getLinkMergedOptions($options, $count, $pageSize));
+	    $links -> add($link);
+
+	    // prev link
+	    if ($prev) {
+	        $link = new \PhlyRestfully\Link('prev');
+	        $link -> setRoute($route);
+	        $link -> setRouteParams($params);
+	        $link -> setRouteOptions($this -> getLinkMergedOptions($options, $prev, $pageSize));
+	        $links -> add($link);
+	    }
+
+	    // next link
+	    if ($next) {
+	        $link = new \PhlyRestfully\Link('next');
+	        $link -> setRoute($route);
+	        $link -> setRouteParams($params);
+	        $link -> setRouteOptions($this -> getLinkMergedOptions($options, $next, $pageSize));
+	        $links -> add($link);
+	    }
+
+	    return true;
+	}
 
     /**
      * Extracts and renders a HalResource and embeds it in the parent
@@ -891,6 +1081,32 @@ class HalLinks extends AbstractHelper implements
         }
 
         return $hydrator->extract($resource);
+    }
+
+    private function getLinkMergedOptions($options, $pageNumber, $pageSize) {
+
+        $mergedOptions = array('query' => array());
+
+        foreach($options['query'] as $optionName => $optionValue) {
+
+            if($optionName === $this -> pageNumberUrlParameterName) {
+
+                $mergedOptions['query'][$optionName] = $pageNumber;
+
+            } else if($optionName === $this -> pageSizeUrlParameterName) {
+
+                $mergedOptions['query'][$optionName] = $pageSize;
+
+            } else {
+
+                $mergedOptions['query'][$optionName] = $optionValue;
+
+            }
+
+        }
+
+        return $mergedOptions;
+
     }
 
 }
