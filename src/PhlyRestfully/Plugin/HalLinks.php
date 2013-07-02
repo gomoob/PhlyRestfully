@@ -156,7 +156,9 @@ class HalLinks extends AbstractHelper implements
     protected $serverUrlHelper;
 
     /**
-     * @var Url
+     * A Zend URL Helper used to create URL strings based on named routes.
+     *
+     * @var \Zend\View\Helper\Url
      */
     protected $urlHelper;
 
@@ -287,11 +289,13 @@ class HalLinks extends AbstractHelper implements
     }
 
     /**
-     * @param Url $helper
+     * Sets the Zend URL Helper used to create URL strings based on named routes.
+     *
+     * @var \Zend\View\Helper\Url $urlHelper the Zend URL Helper used to create URL strings based on named routes.
      */
-    public function setUrlHelper(Url $helper)
+    public function setUrlHelper(Url $urlHelper)
     {
-        $this->urlHelper = $helper;
+        $this -> urlHelper = $urlHelp;
     }
 
     /**
@@ -587,6 +591,8 @@ class HalLinks extends AbstractHelper implements
      *
      * @throws Exception\DomainException if Link is incomplete, a link is incomplete if it does not define an URL or a
      *                                   Route definition to generate an URL
+     * @throws \LogicException if the function cannot generate a URL because no URL Helper has been associated to this
+     *                         component.
      */
     public function fromLink(Link $linkDefinition)
     {
@@ -610,6 +616,13 @@ class HalLinks extends AbstractHelper implements
         // Otherwise we use the route parameters associated to the Link definition to generate an URL with the Zend
         // Framework 2 URL Helper component
         else {
+
+            // The URL Helper must have been defined
+            if(!isset($this -> urlHelper)) {
+
+                throw new \LogicException('No URL Helper has been associated to this component !');
+
+            }
 
             $path = call_user_func(
                     $this -> urlHelper,
