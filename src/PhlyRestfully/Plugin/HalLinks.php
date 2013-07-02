@@ -151,7 +151,9 @@ class HalLinks extends AbstractHelper implements
     protected $metadataMap;
 
     /**
-     * @var ServerUrl
+     * A Zend Server URL Helper used to create absoltue URL strings.
+     *
+     * @var \Zend\View\Helper\ServerUrl
      */
     protected $serverUrlHelper;
 
@@ -281,11 +283,13 @@ class HalLinks extends AbstractHelper implements
     }
 
     /**
-     * @param ServerUrl $helper
+     * Sets the Zend Server URL Helper used to create absolute URL strings.
+     *
+     * @param \Zend\View\Helper\ServerUrl $helper the Zend Server URL Helper used to create absolute URL strings.
      */
-    public function setServerUrlHelper(ServerUrl $helper)
+    public function setServerUrlHelper(ServerUrl $serverUrlHelper)
     {
-        $this->serverUrlHelper = $helper;
+        $this -> serverUrlHelper = $serverUrlHelper;
     }
 
     /**
@@ -593,6 +597,8 @@ class HalLinks extends AbstractHelper implements
      *                                   Route definition to generate an URL
      * @throws \LogicException if the function cannot generate a URL because no URL Helper has been associated to this
      *                         component.
+     * @throws \LogicException if the function cannot generate a URL because no Server URL Helper has been associated to
+     *                         this component.
      */
     public function fromLink(Link $linkDefinition)
     {
@@ -637,6 +643,13 @@ class HalLinks extends AbstractHelper implements
                 $linkArray['href'] = $path;
 
             } else {
+
+                // The Server URL Helper must have been defined
+                if(!isset($this -> serverUrlHelper)) {
+
+                    throw new \LogicException('No Server URL Helper has been associated to this component !');
+
+                }
 
                 $linkArray['href'] = call_user_func($this -> serverUrlHelper, $path);
 
