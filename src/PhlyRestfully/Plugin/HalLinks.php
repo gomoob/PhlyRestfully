@@ -295,7 +295,7 @@ class HalLinks extends AbstractHelper implements
      */
     public function setUrlHelper(Url $urlHelper)
     {
-        $this -> urlHelper = $urlHelp;
+        $this -> urlHelper = $urlHelper;
     }
 
     /**
