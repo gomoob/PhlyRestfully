@@ -578,61 +578,78 @@ class HalLinks extends AbstractHelper implements
     }
 
     /**
-     * Create a URL from a Link
+     * Create a HAL Link from a PhlyRestfully Link Definition object.
      *
-     * @param  Link $linkDefinition
-     * @return string
-     * @throws Exception\DomainException if Link is incomplete
+     * @param  Link $linkDefinition A PhlyRestfully Link Definition which describe a HAL Link to be generated.
+     *
+     * @return array An array which defines a link generated with the provided Link Definition. This array is directly
+     *               convertible to a JSON representation of the link (that's to say a JSON HAL Link representation).
+     *
+     * @throws Exception\DomainException if Link is incomplete, a link is incomplete if it does not define an URL or a
+     *                                   Route definition to generate an URL
      */
     public function fromLink(Link $linkDefinition)
     {
-        if (!$linkDefinition->isComplete()) {
+        // If the Link definition does not define an URL or Zend Route parameters
+        if (!$linkDefinition -> isComplete()) {
             throw new Exception\DomainException(sprintf(
                 'Link from resource provided to %s was incomplete; must contain a URL or a route',
                 __METHOD__
             ));
         }
 
-        if ($linkDefinition->hasUrl()) {
-            return array(
-                'href' => $linkDefinition->getUrl(),
-            );
+        $linkArray = array();
+
+        // If the Linke Definition already defines an URL we use it
+        if ($linkDefinition -> hasUrl()) {
+
+            $linkArray['href'] = $linkDefinition->getUrl();
+
         }
 
-        // -- Decode %XX URL codes
-        $linkArray['href'] = urldecode($linkArray['href']);
+        // Otherwise we use the route parameters associated to the Link definition to generate an URL with the Zend
+        // Framework 2 URL Helper component
+        else {
 
-        // -- If a 'title' attribute is provided we set it
+            $path = call_user_func(
+                    $this -> urlHelper,
+                    $linkDefinition -> getRoute(),
+                    $linkDefinition -> getRouteParams(),
+                    $linkDefinition -> getRouteOptions(),
+                    true
+            );
+
+            if (substr($path, 0, 4) == 'http') {
+
+                $linkArray['href'] = $path;
+
+            } else {
+
+                $linkArray['href'] = call_user_func($this -> serverUrlHelper, $path);
+
+            }
+
+        }
+
+        // If a HAL 'title' attribute is provided we set it
         if ($linkDefinition -> getTitle() !== null) {
 
             $linkArray['title'] = $linkDefinition -> getTitle();
 
         }
 
-        // -- If a 'templated' attribute is provided we set it
+        // -- If a HAL 'templated' attribute is provided we set it
         if ($linkDefinition->isTemplated() !== null) {
 
             $linkArray['templated'] = $linkDefinition -> isTemplated();
 
         }
 
-        $path = call_user_func(
-            $this->urlHelper,
-            $linkDefinition->getRoute(),
-            $linkDefinition->getRouteParams(),
-            $linkDefinition->getRouteOptions(),
-            true
-        );
+        // -- Decode %XX URL codes
+        $linkArray['href'] = urldecode($linkArray['href']);
 
-        if (substr($path, 0, 4) == 'http') {
-            return array(
-                'href' => $path,
-            );
-        }
+        return $linkArray;
 
-        return array(
-            'href' => call_user_func($this->serverUrlHelper, $path),
-        );
     }
 
     /**
