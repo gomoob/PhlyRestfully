@@ -12,7 +12,8 @@ use Traversable;
 use Zend\Stdlib\ArrayUtils;
 
 /**
- * Model a collection for use with HAL payloads
+ * Class which represents a HAL Collection, a HAL Collection is used to create paginated collection of REST resources.
+ *
  */
 class HalCollection implements LinkCollectionAwareInterface
 {
@@ -98,6 +99,15 @@ class HalCollection implements LinkCollectionAwareInterface
     protected $resourceRouteParams = array();
 
     /**
+     * Attribute which stores the total number of records of the whole collection. The purpose of a HAL Collection is
+     * to paginate result, so, a HAL collection only transports the records for one page. This records indicate how many
+     * records their are in all the pages (i.e this is the total number of entries in your table's data storage).
+     *
+     * @var int
+     */
+    protected $totalNumberOfRecords  = 0;
+
+    /**
      * @param  array|Traversable|\Zend\Paginator\Paginator $collection
      * @param  string $collectionRoute
      * @param  string $resourceRoute
@@ -169,6 +179,19 @@ class HalCollection implements LinkCollectionAwareInterface
         }
         $prop = $names[$name];
         return $this->{$prop};
+    }
+
+    /**
+     * Gets the total number of records of the whole collection. The purpose of a HAL Collection is
+     * to paginate result, so, a HAL collection only transports the records for one page. This records indicate how many
+     * records their are in all the pages.
+     *
+     * @return int the total number of records in the underlying collection.
+     */
+    public function getTotalNumberOfRecords() {
+
+    	return $this -> totalNumberOfRecords;
+
     }
 
     /**
@@ -401,6 +424,19 @@ class HalCollection implements LinkCollectionAwareInterface
         }
         $this->resourceRouteParams = $params;
         return $this;
+    }
+
+    /**
+     * Sets the total number of records of the whole collection. The purpose of a HAL Collection is to paginate result,
+     * so, a HAL collection only transports the records for one page. This attribute indicate how many records their are
+     * in all the pages.
+     *
+     * @param int $totalNumberOfRecords the total number of records.
+     */
+    public function setTotalNumberOfRecords($totalNumberOfRecords) {
+
+    	$this -> totalNumberOfRecords = $totalNumberOfRecords;
+
     }
 
     /**

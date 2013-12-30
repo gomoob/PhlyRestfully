@@ -258,7 +258,7 @@ class Link
             throw new Exception\InvalidArgumentException(sprintf(
                 'Received invalid URL: %s',
                 $e->getMessage()
-            ), $e->getCode, $e);
+            ), $e->getCode(), $e);
         }
 
         if (!$uri->isValid()) {
@@ -267,7 +267,7 @@ class Link
             );
         }
 
-        $this->url = $uri->toString();
+        $this -> url = $uri -> toString();
         return $this;
     }
 
@@ -318,7 +318,7 @@ class Link
      */
     public function getUrl()
     {
-        return $this->url;
+        return $this -> url;
     }
 
     /**
