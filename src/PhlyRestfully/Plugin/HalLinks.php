@@ -488,6 +488,8 @@ class HalLinks extends AbstractHelper implements
             $payload['_embedded'][$collectionName][] = $resource;
         }
 
+        $payload['_embedded']['totalNumberOfRecords'] = $halCollection -> getTotalNumberOfRecords();
+
         return $payload;
     }
 
